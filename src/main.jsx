@@ -67,6 +67,26 @@ const pipeline = [
   { index: '04', title: '扰动微调与验证', detail: 'QO-83 · PF-429242', state: '排队中', progress: 8, tone: 'queued' },
 ]
 
+const degResults = [
+  { gene: 'SLC1A3', symbol: '星形胶质细胞反应', logfc: '+1.84', fdr: '2.1e-08', direction: 'up', evidence: 'GSE331114' },
+  { gene: 'AIF1', symbol: '小胶质细胞激活', logfc: '+1.42', fdr: '7.8e-07', direction: 'up', evidence: 'Tahoe-100M' },
+  { gene: 'CLDN5', symbol: '血脑屏障完整性', logfc: '-1.18', fdr: '3.4e-05', direction: 'down', evidence: 'GSE225948' },
+  { gene: 'MBP', symbol: '髓鞘修复', logfc: '+0.96', fdr: '1.2e-04', direction: 'up', evidence: 'scPerturb' },
+]
+
+const pathwayResults = [
+  { name: '炎症反应 / NF-κB', score: '+0.72', support: '高', count: '38 genes' },
+  { name: '血脑屏障 / tight junction', score: '-0.44', support: '中', count: '21 genes' },
+  { name: '神经保护 / PI3K-AKT', score: '+0.31', support: '中', count: '27 genes' },
+]
+
+const stateScores = [
+  { label: '炎症负荷', value: 72, tone: 'coral', delta: '+8.4%' },
+  { label: '血脑屏障损伤', value: 44, tone: 'amber', delta: '-5.1%' },
+  { label: '修复潜力', value: 68, tone: 'teal', delta: '+12.7%' },
+  { label: '细胞存活度', value: 86, tone: 'blue', delta: '+3.2%' },
+]
+
 function App() {
   const [activeNav, setActiveNav] = useState('概览')
   const [mobileNav, setMobileNav] = useState(false)
@@ -74,6 +94,13 @@ function App() {
   const [showPrediction, setShowPrediction] = useState(false)
   const [selectedDataset, setSelectedDataset] = useState(null)
   const [notice, setNotice] = useState('')
+  const [analysisFilters, setAnalysisFilters] = useState({
+    dataset: 'GSE331114 · 人类 AIS 单细胞',
+    cell: '小胶质细胞',
+    stage: '急性期（24 h）',
+    perturbation: 'PF-429242 · 2.5 μM / 24 h',
+    range: '最近 30 天',
+  })
 
   const focusText = useMemo(() => {
     if (activeNav === '预测工作台') return '预测工作台'
@@ -140,28 +167,48 @@ function App() {
 
         <div className="content-wrap">
           <section className="page-intro">
-            <div><div className="eyebrow"><span className="eyebrow-line" /> 2026.09.27 · 周日</div><h1>把 AIS 数据，<em>变成可验证的推断。</em></h1><p>从公共数据治理到跨细胞扰动预测，追踪每一个样本、参数与模型版本。</p></div>
-            <div className="intro-actions"><button className="button button-quiet" onClick={() => showNotice('导出当前工作台摘要')}><Download size={16} /> 导出摘要</button><button className="button button-primary" onClick={() => setShowPrediction(true)}><Plus size={17} /> 新建预测</button></div>
+            <div><div className="eyebrow"><span className="eyebrow-line" /> ANALYSIS / AIS-0427 · 已保存分析</div><h1>AIS 扰动响应 <em>分析结果</em></h1><p>面向小胶质细胞的跨数据集预测，结果已绑定模型、数据版本与证据来源。</p></div>
+            <div className="intro-actions"><button className="button button-quiet" onClick={() => showNotice('分析结果摘要已导出')}><Download size={16} /> 导出结果</button><button className="button button-primary" onClick={() => setShowPrediction(true)}><Plus size={17} /> 新建分析</button></div>
           </section>
 
-          <section className="metric-grid" aria-label="项目关键指标">
-            <MetricCard label="已接入数据集" value="12" suffix="个" detail="本月 +2" tone="teal" icon={Database} trend="up" />
-            <MetricCard label="统一细胞数量" value="48.6" suffix="M" detail="覆盖 6 类组织" tone="blue" icon={Layers3} trend="up" />
-            <MetricCard label="可训练扰动" value="1,284" suffix="条" detail="药物 71% · 遗传 29%" tone="amber" icon={Zap} trend="up" />
-            <MetricCard label="元数据完整率" value="94.7" suffix="%" detail="目标 ≥ 95%" tone="coral" icon={ShieldCheck} trend="down" />
+          <section className="analysis-toolbar panel" aria-label="分析上下文">
+            <div className="toolbar-heading"><div><span className="section-eyebrow">ANALYSIS CONTEXT</span><h3>分析上下文</h3></div><span className="saved-state"><span className="status-dot" /> 已保存 · 10:42:08</span></div>
+            <div className="filter-grid">
+              {[
+                ['dataset', '数据集', ['GSE331114 · 人类 AIS 单细胞', 'GSE225948 · 小鼠 MCAO', 'scPerturb RNA · sciplex2/3/4']],
+                ['cell', '细胞类型', ['小胶质细胞', '星形胶质细胞', '脑微血管内皮细胞']],
+                ['stage', '疾病阶段', ['急性期（24 h）', '亚急性期（7 d）', '恢复期（28 d）']],
+                ['perturbation', '扰动条件', ['PF-429242 · 2.5 μM / 24 h', 'QO-83 · 1.0 μM / 24 h', '未处理对照']],
+                ['range', '结果范围', ['最近 30 天', '最近 90 天', '全部版本']],
+              ].map(([key, label, options]) => <label className="filter-field" key={key}><span>{label}</span><select value={analysisFilters[key]} onChange={(event) => { setAnalysisFilters({ ...analysisFilters, [key]: event.target.value }); showNotice(`${label}已更新`) }}>{options.map((option) => <option key={option}>{option}</option>)}</select></label>)}
+              <button className="button button-outline filter-action" onClick={() => { setAnalysisFilters({ dataset: 'GSE331114 · 人类 AIS 单细胞', cell: '小胶质细胞', stage: '急性期（24 h）', perturbation: 'PF-429242 · 2.5 μM / 24 h', range: '最近 30 天' }); showNotice('已恢复默认分析上下文') }}><SlidersHorizontal size={15} /> 重置</button>
+            </div>
           </section>
 
-          <section className="hero-grid">
-            <div className="model-hero panel">
-              <div className="panel-topline"><div className="panel-kicker"><BrainCircuit size={16} /> 当前主模型</div><span className="model-status"><span className="status-dot pulse" /> 正在训练</span></div>
-              <div className="model-head"><div><h2>Chen-PerturbVAE</h2><p>跨细胞扰动模型 · AIS 专病适配</p></div><button className="icon-button light" aria-label="模型更多操作" onClick={() => showNotice('模型操作菜单已准备')}><MoreHorizontal size={18} /></button></div>
-              <div className="model-stat-row"><div className="model-stat"><span>当前阶段</span><strong>03 / 04</strong><small>疾病状态适配</small></div><div className="model-stat"><span>验证集 Pearson</span><strong>0.847</strong><small className="positive">↑ 0.061 vs baseline</small></div><div className="model-stat"><span>最新 checkpoint</span><strong>epoch 18</strong><small>18 分钟前保存</small></div></div>
-              <div className="model-progress"><div className="progress-label"><span>本轮训练进度</span><strong>72%</strong></div><div className="progress-track"><span style={{ width: '72%' }} /></div><div className="progress-foot"><span>预计还需 46 分钟</span><button className="text-button" onClick={() => setActiveNav('模型训练')}>查看训练轨迹 <ArrowUpRight size={14} /></button></div></div>
-              <div className="model-footer"><div className="chip-row"><span className="chip">AIS v1.2</span><span className="chip">seed 20260918</span><span className="chip">A100 × 4</span></div><button className="button button-outline" onClick={() => showNotice('已打开模型详情')}>查看详情 <ChevronRight size={15} /></button></div>
+          <section className="metric-grid analysis-metrics" aria-label="分析结果指标">
+            <MetricCard label="预测可信度" value="0.82" suffix="score" detail="适用域内 · 置信区间 ±0.07" tone="teal" icon={ShieldCheck} trend="up" />
+            <MetricCard label="AIS 损伤评分" value="−0.31" suffix="Δ" detail="较未处理对照下降 18.6%" tone="blue" icon={Activity} trend="up" />
+            <MetricCard label="显著响应基因" value="486" suffix="个" detail="FDR < 0.05 · |logFC| > 0.5" tone="amber" icon={Zap} trend="up" />
+            <MetricCard label="模型适用域" value="87" suffix="%" detail="跨细胞验证 · 4 / 5 通过" tone="coral" icon={BrainCircuit} trend="up" />
+          </section>
+
+          <section className="analysis-grid">
+            <div className="result-panel panel">
+              <div className="panel-heading"><div><span className="section-eyebrow">PERTURBATION RESPONSE</span><h3>表达变化 · 预测 vs 对照</h3></div><div className="legend"><span><i className="legend-dot observed" />观测</span><span><i className="legend-dot predicted" />预测</span></div></div>
+              <div className="chart-meta"><span>标准化表达量（z-score）</span><span>24 h · n = 42,816 cells</span></div>
+              <div className="expression-chart"><div className="chart-axis"><span>2.0</span><span>1.0</span><span>0</span><span>−1.0</span><span>−2.0</span></div><div className="chart-body"><div className="chart-grid-lines"><i /><i /><i /><i /><i /></div><svg viewBox="0 0 560 190" role="img" aria-label="表达变化趋势图" preserveAspectRatio="none"><polyline className="chart-line observed-line" points="0,136 80,118 160,125 240,82 320,94 400,55 480,66 560,38" /><polyline className="chart-line predicted-line" points="0,142 80,125 160,118 240,91 320,83 400,63 480,54 560,43" /><circle className="chart-point" cx="400" cy="63" r="4" /><circle className="chart-point" cx="560" cy="43" r="4" /></svg><div className="chart-labels"><span>对照</span><span>炎症</span><span>屏障</span><span>修复</span><span>存活</span><span>综合</span></div></div></div>
+              <div className="result-note"><Check size={14} /><span>预测曲线与独立验证集方向一致，关键峰值位于炎症与修复通路。</span><button className="text-button" onClick={() => setActiveTab('评价指标')}>查看评估 <ChevronRight size={14} /></button></div>
             </div>
 
-            <div className="activity-panel panel"><div className="panel-heading"><div><span className="section-eyebrow">LIVE FEED</span><h3>最近动态</h3></div><button className="text-button" onClick={() => setActiveNav('版本追溯')}>全部记录 <ArrowUpRight size={14} /></button></div><div className="activity-list">{activities.map(({ time, title, detail, tone, icon: Icon }) => <div className="activity-item" key={time}><div className={`activity-icon ${tone}`}><Icon size={15} /></div><div className="activity-copy"><div className="activity-title">{title}</div><div className="activity-detail">{detail}</div></div><time>{time}</time></div>)}</div><div className="activity-footer"><span className="status-dot" /> 自动刷新 · 30 秒</div></div>
+            <div className="state-panel panel"><div className="panel-heading"><div><span className="section-eyebrow">CELL STATE SCORE</span><h3>AIS 细胞状态</h3></div><button className="icon-button subtle" aria-label="细胞状态更多操作" onClick={() => showNotice('细胞状态评分详情已打开')}><MoreHorizontal size={17} /></button></div><div className="state-score-list">{stateScores.map((item) => <div className="state-score" key={item.label}><div className="score-label"><span>{item.label}</span><strong>{item.value}<small>/100</small></strong></div><div className="score-track"><span className={item.tone} style={{ width: `${item.value}%` }} /></div><div className="score-foot"><span>{item.value >= 65 ? '高于基线' : '低于基线'}</span><em className={item.value >= 65 ? 'positive' : 'negative'}>{item.delta}</em></div></div>)}</div><div className="state-foot"><span className="status-dot" /> 评分基于 4 个 AIS 标志基因集</div></div>
           </section>
+
+          <section className="evidence-grid">
+            <div className="evidence-panel panel"><div className="panel-heading"><div><span className="section-eyebrow">TOP SIGNALS</span><h3>关键差异基因</h3></div><button className="text-button" onClick={() => showNotice('已打开完整差异基因表')}>完整结果 <ArrowUpRight size={14} /></button></div><div className="evidence-table-wrap"><table className="evidence-table"><thead><tr><th>基因</th><th>功能注释</th><th>logFC</th><th>FDR</th><th>证据</th></tr></thead><tbody>{degResults.map((item) => <tr key={item.gene}><td><strong className="gene-name">{item.gene}</strong></td><td>{item.symbol}</td><td><span className={`fold-change ${item.direction}`}>{item.logfc}</span></td><td className="mono-cell">{item.fdr}</td><td><span className="evidence-source">{item.evidence}</span></td></tr>)}</tbody></table></div></div>
+            <div className="pathway-panel panel"><div className="panel-heading"><div><span className="section-eyebrow">PATHWAY SHIFT</span><h3>通路变化</h3></div><button className="icon-button subtle" aria-label="通路筛选" onClick={() => showNotice('通路筛选已打开')}><SlidersHorizontal size={16} /></button></div><div className="pathway-list">{pathwayResults.map((item) => <div className="pathway-row" key={item.name}><div className="pathway-main"><strong>{item.name}</strong><span>{item.count} · 证据{item.support}</span></div><span className={`pathway-score ${item.score.startsWith('+') ? 'positive' : 'negative'}`}>{item.score}</span></div>)}</div><div className="pathway-footer"><span>GSEA · Reactome + MSigDB</span><button className="text-button" onClick={() => showNotice('通路证据已复制')}><Tag size={13} /> 复制证据</button></div></div>
+          </section>
+
+          <section className="trace-strip panel"><div className="trace-title"><span className="section-eyebrow">PROVENANCE</span><h3>结果追溯</h3><span className="trace-status"><Check size={13} /> 可复现</span></div><div className="trace-items"><div><span>模型版本</span><strong>Chen-PerturbVAE <small>v1.8.0</small></strong></div><div><span>数据版本</span><strong>ais-curated <small>2026.09.26</small></strong></div><div><span>参数快照</span><strong>cfg_0427 <small>seed 20260918</small></strong></div><div><span>证据来源</span><strong>4 datasets <small>3 independent</small></strong></div><button className="button button-outline" onClick={() => setActiveNav('版本追溯')}>查看追溯链 <GitBranch size={15} /></button></div></section>
 
           <section className="lower-grid">
             <div className="data-panel panel"><div className="panel-heading data-heading"><div><span className="section-eyebrow">DATA FOUNDATION</span><h3>数据资产</h3></div><div className="heading-actions"><button className="icon-button subtle" aria-label="筛选数据" onClick={() => showNotice('筛选条件已打开')}><SlidersHorizontal size={16} /></button><button className="button button-small" onClick={() => { setActiveNav('数据资源'); showNotice('数据资源页面已切换') }}><Plus size={15} /> 接入数据</button></div></div><div className="dataset-table-wrap"><table><thead><tr><th>数据集</th><th>类型</th><th>细胞数</th><th>完整率</th><th>状态</th><th>更新</th><th /></tr></thead><tbody>{datasets.map((dataset) => <tr key={dataset.name} onClick={() => setSelectedDataset(dataset)} className="clickable-row"><td><div className="dataset-name"><span className={`dataset-mark ${dataset.color}`} />{dataset.name}</div><small>{dataset.source}</small></td><td><span className="type-text">{dataset.type}</span></td><td className="mono-cell">{dataset.cells}</td><td><div className="coverage"><span>{dataset.coverage}</span><div className="mini-track"><span style={{ width: dataset.coverage }} /></div></div></td><td><span className={`state-pill ${dataset.color}`}>{dataset.state}</span></td><td className="muted-cell">{dataset.updated}</td><td><ChevronRight size={16} className="row-chevron" /></td></tr>)}</tbody></table></div><button className="table-footer" onClick={() => setActiveNav('数据资源')}>查看全部 12 个数据集 <ArrowUpRight size={14} /></button></div>
