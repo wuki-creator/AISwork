@@ -87,6 +87,28 @@ const stateScores = [
   { label: '细胞存活度', value: 86, tone: 'blue', delta: '+3.2%' },
 ]
 
+const initialPrimitiveTasks = [
+  { id: 'PT-20260929-004', name: 'AIS 疾病域适配', context: 'Chen-PerturbVAE · epoch 18 / 24', status: 'running', progress: 72, updated: '09:18' },
+  { id: 'PT-20260929-003', name: '扰动响应推断', context: 'PF-429242 · 小胶质细胞', status: 'queued', progress: 0, updated: '09:04' },
+  { id: 'PT-20260929-002', name: '样本元数据复核', context: 'GSE225948 · 3 个待复核样本', status: 'needsReview', progress: 64, updated: '08:55' },
+  { id: 'PT-20260929-001', name: 'AIS 适配集增量校验', context: 'GSE331114 · 42,816 个细胞', status: 'completed', progress: 100, updated: '09:42' },
+]
+
+const primitiveStatus = {
+  running: { label: '运行中', tone: 'running' },
+  queued: { label: '排队中', tone: 'queued' },
+  needsReview: { label: '待复核', tone: 'review' },
+  completed: { label: '已完成', tone: 'completed' },
+}
+
+const taskFilters = [
+  { key: 'all', label: '全部' },
+  { key: 'running', label: '运行中' },
+  { key: 'queued', label: '排队中' },
+  { key: 'needsReview', label: '待复核' },
+  { key: 'completed', label: '已完成' },
+]
+
 function App() {
   const [activeNav, setActiveNav] = useState('概览')
   const [mobileNav, setMobileNav] = useState(false)
@@ -94,6 +116,9 @@ function App() {
   const [showPrediction, setShowPrediction] = useState(false)
   const [selectedDataset, setSelectedDataset] = useState(null)
   const [notice, setNotice] = useState('')
+  const [primitiveTasks, setPrimitiveTasks] = useState(initialPrimitiveTasks)
+  const [taskBarOpen, setTaskBarOpen] = useState(false)
+  const [taskFilter, setTaskFilter] = useState('all')
   const [analysisFilters, setAnalysisFilters] = useState({
     dataset: 'GSE331114 · 人类 AIS 单细胞',
     cell: '小胶质细胞',
@@ -114,6 +139,23 @@ function App() {
   const showNotice = (message) => {
     setNotice(message)
     window.setTimeout(() => setNotice(''), 2600)
+  }
+
+  const taskCounts = useMemo(() => primitiveTasks.reduce((counts, task) => {
+    counts[task.status] = (counts[task.status] || 0) + 1
+    return counts
+  }, {}), [primitiveTasks])
+  const visibleTasks = primitiveTasks.filter((task) => taskFilter === 'all' || task.status === taskFilter)
+  const currentTask = primitiveTasks.find((task) => task.status === 'running') || primitiveTasks.find((task) => task.status === 'queued') || primitiveTasks[0]
+
+  const createPrimitiveTask = () => {
+    const nextNumber = primitiveTasks.reduce((max, task) => Math.max(max, Number(task.id.split('-').at(-1)) || 0), 0) + 1
+    const id = `PT-20260929-${String(nextNumber).padStart(3, '0')}`
+    setPrimitiveTasks((tasks) => [{ id, name: '扰动响应推断', context: '新建预测 · 待调度', status: 'queued', progress: 0, updated: '刚刚' }, ...tasks])
+    setTaskFilter('all')
+    setTaskBarOpen(true)
+    setShowPrediction(false)
+    showNotice(`演示任务 ${id} 已加入队列`)
   }
 
   return (
@@ -224,9 +266,35 @@ function App() {
         </div>
       </main>
 
+      <section className={`primitive-task-dock ${taskBarOpen ? 'is-open' : ''}`} aria-label="原语任务状态栏">
+        {taskBarOpen && <div className="primitive-task-panel" id="primitive-task-panel">
+          <div className="primitive-task-heading">
+            <div><h2>原语任务</h2><p>查看任务编号、当前状态和完成度</p></div>
+            <span className="task-demo-label">演示数据 · 未连接任务服务</span>
+          </div>
+          <div className="primitive-task-filters" aria-label="筛选任务状态">
+            {taskFilters.map(({ key, label }) => <button key={key} type="button" className={`task-filter ${taskFilter === key ? 'is-active' : ''}`} aria-pressed={taskFilter === key} onClick={() => setTaskFilter(key)}>{label}<span>{key === 'all' ? primitiveTasks.length : taskCounts[key] || 0}</span></button>)}
+          </div>
+          <div className="primitive-task-list" aria-live="polite">
+            {visibleTasks.length ? visibleTasks.map((task) => <div className="primitive-task-row" key={task.id}>
+              <div className="primitive-task-identity"><span className="task-id">{task.id}</span><strong>{task.name}</strong><small>{task.context}</small></div>
+              <span className={`task-status ${primitiveStatus[task.status].tone}`}><span className="task-status-dot" />{primitiveStatus[task.status].label}</span>
+              <div className="task-completion"><div><span>完成度</span><strong>{task.progress}%</strong></div><div className="task-progress" role="progressbar" aria-label={`${task.id} 完成度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}><span className={primitiveStatus[task.status].tone} style={{ width: `${task.progress}%` }} /></div></div>
+              <time className="task-time">{task.updated}</time>
+            </div>) : <div className="task-empty">暂无该状态的任务。切换筛选条件查看其他任务。</div>}
+          </div>
+        </div>}
+        <div className="primitive-task-summary">
+          <button type="button" className="task-dock-toggle" aria-expanded={taskBarOpen} aria-controls="primitive-task-panel" onClick={() => setTaskBarOpen((open) => !open)}><Layers3 size={17} /><strong>任务状态</strong><span className="task-total">{primitiveTasks.length}</span><ChevronDown size={16} className="task-chevron" /></button>
+          <div className="task-summary-current"><span className="task-id">{currentTask.id}</span><span className="task-summary-name">{currentTask.name}</span><span className={`task-status ${primitiveStatus[currentTask.status].tone}`}><span className="task-status-dot" />{primitiveStatus[currentTask.status].label}</span></div>
+          <div className="task-summary-progress"><div className="task-progress" role="progressbar" aria-label={`${currentTask.id} 完成度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={currentTask.progress}><span className={primitiveStatus[currentTask.status].tone} style={{ width: `${currentTask.progress}%` }} /></div><strong>{currentTask.progress}%</strong></div>
+          <span className="task-summary-counts">运行中 {taskCounts.running || 0} · 排队 {taskCounts.queued || 0} · 待复核 {taskCounts.needsReview || 0}</span>
+        </div>
+      </section>
+
       {selectedDataset && <div className="overlay" onClick={() => setSelectedDataset(null)}><aside className="detail-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><span className="section-eyebrow">DATASET DETAIL</span><h2>{selectedDataset.name}</h2></div><button className="icon-button" aria-label="关闭数据详情" onClick={() => setSelectedDataset(null)}><X size={18} /></button></div><div className="drawer-state"><span className={`state-pill ${selectedDataset.color}`}>{selectedDataset.state}</span><span>最后更新 {selectedDataset.updated}</span></div><div className="drawer-metrics"><div><span>细胞数</span><strong>{selectedDataset.cells}</strong></div><div><span>元数据完整率</span><strong>{selectedDataset.coverage}</strong></div><div><span>数据类型</span><strong>{selectedDataset.type}</strong></div></div><div className="drawer-section"><h3>标准化字段</h3><div className="field-list"><div><span>study_id</span><Check size={15} /></div><div><span>sample_context</span><Check size={15} /></div><div><span>cell_annotation</span><Check size={15} /></div><div><span>perturbation_context</span><Check size={15} /></div><div className="field-warning"><span>collection_time</span><AlertTriangle size={15} /></div></div></div><div className="drawer-section"><h3>来源与追溯</h3><p className="drawer-note">该数据集将在进入训练集前，经过研究、供体、样本、细胞和质控五层校验。</p><button className="button button-outline full-width" onClick={() => showNotice('数据字典已打开')}><FileCheck2 size={16} /> 查看数据字典</button></div></aside></div>}
 
-      {showPrediction && <div className="overlay" onClick={() => setShowPrediction(false)}><aside className="prediction-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><span className="section-eyebrow">NEW PREDICTION</span><h2>创建扰动预测</h2></div><button className="icon-button" aria-label="关闭预测" onClick={() => setShowPrediction(false)}><X size={18} /></button></div><p className="drawer-intro">选择一个已治理的基础状态与扰动条件，生成带可信度和适用域提示的候选响应。</p><div className="form-stack"><label>基础细胞状态<select defaultValue="GSE331114 · 小胶质细胞"><option>GSE331114 · 小胶质细胞</option><option>GSE225948 · 星形胶质细胞</option><option>自定义表达矩阵</option></select></label><label>扰动类型<div className="segmented"><button className="segment active">化合物</button><button className="segment">遗传靶点</button></div></label><label>化合物 / 靶点<select defaultValue="PF-429242 · ChEMBL 4861"><option>PF-429242 · ChEMBL 4861</option><option>QO-83 · PubChem 138564</option><option>自定义靶点集合</option></select></label><div className="form-grid"><label>剂量<input defaultValue="2.5" /><small>μM</small></label><label>处理时长<input defaultValue="24" /><small>小时</small></label></div><label>输出范围<div className="check-list"><label className="check-row"><input type="checkbox" defaultChecked /><span>差异基因与方向</span><Check size={14} /></label><label className="check-row"><input type="checkbox" defaultChecked /><span>AIS 细胞状态评分</span><Check size={14} /></label><label className="check-row"><input type="checkbox" defaultChecked /><span>通路变化与证据</span><Check size={14} /></label></div></label></div><div className="drawer-footer"><div><span className="status-dot" /> 预计 2–4 分钟</div><button className="button button-primary" onClick={() => { setShowPrediction(false); showNotice('预测任务已创建，正在排队') }}><Play size={16} /> 开始预测</button></div></aside></div>}
+      {showPrediction && <div className="overlay" onClick={() => setShowPrediction(false)}><aside className="prediction-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><span className="section-eyebrow">NEW PREDICTION</span><h2>创建扰动预测</h2></div><button className="icon-button" aria-label="关闭预测" onClick={() => setShowPrediction(false)}><X size={18} /></button></div><p className="drawer-intro">选择一个已治理的基础状态与扰动条件，生成带可信度和适用域提示的候选响应。</p><div className="form-stack"><label>基础细胞状态<select defaultValue="GSE331114 · 小胶质细胞"><option>GSE331114 · 小胶质细胞</option><option>GSE225948 · 星形胶质细胞</option><option>自定义表达矩阵</option></select></label><label>扰动类型<div className="segmented"><button className="segment active">化合物</button><button className="segment">遗传靶点</button></div></label><label>化合物 / 靶点<select defaultValue="PF-429242 · ChEMBL 4861"><option>PF-429242 · ChEMBL 4861</option><option>QO-83 · PubChem 138564</option><option>自定义靶点集合</option></select></label><div className="form-grid"><label>剂量<input defaultValue="2.5" /><small>μM</small></label><label>处理时长<input defaultValue="24" /><small>小时</small></label></div><label>输出范围<div className="check-list"><label className="check-row"><input type="checkbox" defaultChecked /><span>差异基因与方向</span><Check size={14} /></label><label className="check-row"><input type="checkbox" defaultChecked /><span>AIS 细胞状态评分</span><Check size={14} /></label><label className="check-row"><input type="checkbox" defaultChecked /><span>通路变化与证据</span><Check size={14} /></label></div></label></div><div className="drawer-footer"><div><span className="status-dot" /> 预计 2–4 分钟</div><button className="button button-primary" onClick={createPrimitiveTask}><Play size={16} /> 开始预测</button></div></aside></div>}
 
       {notice && <div className="toast"><Check size={15} /> {notice}</div>}
     </div>
